@@ -3,19 +3,6 @@ import sqlite3
 from tkinter import messagebox, simpledialog
 import datetime
 
-def validate_login():
-    username = username_entry.get()
-    password = password_entry.get()
-    if username == "admin" and password == "password":
-        messagebox.showinfo("Login Successful", "Welcome, " + username + "!")
-        open_main_window()
-    elif username == "customer" and password == "password":
-        messagebox.showinfo("Login Successful", "Welcome, Customer!")
-        root.destroy()  # Close login window
-        open_customer_window()
-    else:
-        messagebox.showerror("Login Failed", "Invalid username or password")
-
 def open_main_window():
     # Close login window
     root.destroy()
@@ -29,7 +16,7 @@ def open_main_window():
     screen_height = main_window.winfo_screenheight()
 
     # Set background color
-    main_window.configure(bg="#3498db")
+    main_window.configure(bg="#0e3246")
 
     # Create Add Product button
     add_product_button = tk.Button(main_window, text="Add Product", command=open_add_product_window, bg="#2ecc71", fg="white", font=("Arial", 14))
@@ -39,11 +26,19 @@ def open_main_window():
     remove_product_button = tk.Button(main_window, text="Remove Product", command=open_remove_product_window, bg="#e74c3c", fg="white", font=("Arial", 14))
     remove_product_button.place(relx=0.5, rely=0.5, anchor="center")
 
+    # Create Logout button
+    logout_button = tk.Button(main_window, text="Logout", command=lambda: logout(main_window), bg="#e67e22", fg="white", font=("Arial", 14))
+    logout_button.place(relx=0.95, rely=0.05, anchor="ne")  # Top right corner
+
     # Centering the window
     main_window.geometry(f"{screen_width}x{screen_height}+0+0")
 
     # Run the application
     main_window.mainloop()
+
+def logout(current_window):
+    current_window.destroy()  # Close the current window
+    open_login_page()
 
 def add_product_to_database(product_details):
     try:
@@ -99,14 +94,14 @@ def open_add_product_window():
     screen_height = add_product_window.winfo_screenheight()
 
     # Set background color
-    add_product_window.configure(bg="#3498db")
+    add_product_window.configure(bg="#0e3246")
 
     # Create input fields
     labels = ["Product Name", "Brand", "Price", "Category", "Admin ID", "Quantity"]
     global entry_fields
     entry_fields = []
     for i, label_text in enumerate(labels):
-        label = tk.Label(add_product_window, text=label_text + ":", bg="#3498db", fg="white", font=("Arial", 14))
+        label = tk.Label(add_product_window, text=label_text + ":", bg="#0e3246", fg="white", font=("Arial", 14))
         label.grid(row=i, column=0, padx=10, pady=5, sticky="e")
         entry = tk.Entry(add_product_window, font=("Arial", 14))
         entry.grid(row=i, column=1, padx=10, pady=5)
@@ -147,55 +142,52 @@ def remove_product_from_database(product_id):
     finally:
         conn.close()
 
-# Function to handle Remove button click
 def remove_product(product_id):
     remove_product_from_database(product_id)
-    # Refresh the window after removal
     open_remove_product_window()
 
-# Function to open the Remove Product window
 def open_remove_product_window():
-    # Create remove product window
     remove_product_window = tk.Tk()
     remove_product_window.title("Remove Product")
 
-    # Get screen width and height
     screen_width = remove_product_window.winfo_screenwidth()
     screen_height = remove_product_window.winfo_screenheight()
 
-    # Set background color
-    remove_product_window.configure(bg="#3498db")
+    remove_product_window.configure(bg="#0e3246")
 
-    # Get products from database
     products = get_products_from_database()
 
-    # Display products
     for i, product in enumerate(products):
         product_str = ", ".join(map(str, product))
-        label = tk.Label(remove_product_window, text=product_str, bg="#3498db", fg="white", font=("Arial", 14))
+        label = tk.Label(remove_product_window, text=product_str, bg="#0e3246", fg="white", font=("Arial", 14))
         label.grid(row=i, column=0, padx=10, pady=5)
         remove_button = tk.Button(remove_product_window, text="Remove", command=lambda product_id=product[0]: remove_product(product_id), bg="#e74c3c", fg="white", font=("Arial", 14))
         remove_button.grid(row=i, column=1, padx=10, pady=5)
 
-    # Centering the window
     remove_product_window.geometry(f"{screen_width}x{screen_height}+0+0")
 
-    # Run the application
     remove_product_window.mainloop()
 
 cus_id=101
-# Function to handle Buy button click
-def buy_product(product_id):
+
+def buy_product(product_id, label):
     quantity_to_buy = simpledialog.askinteger("Quantity", "Enter the quantity you want to buy:")
     if quantity_to_buy is None:
-        return  # User clicked Cancel
+        return
     try:
         conn = sqlite3.connect('products.db')
         c = conn.cursor()
-        c.execute('''SELECT quantity FROM stock WHERE id=?''', (product_id,))
-        print('''SELECT quantity FROM stock WHERE id=''', product_id)
-        current_quantity = c.fetchone()[0]
+        c.execute('''SELECT name, brand, price, category, admin_id, quantity FROM item WHERE id=?''', (product_id,))
+        product = c.fetchone()
+        product_name = product[0]  # Assuming the first column is the product name
+        brand = product[1]
+        price = product[2]
+        category = product[3]
+        admin_id = product[4]
+        current_quantity = product[5]  # Assuming the second column is the current quantity
+
         if quantity_to_buy <= current_quantity:
+            # Create tables if they do not exist
             c.execute('''CREATE TABLE IF NOT EXISTS sales
                      (sales_id INTEGER NOT NULL,
                       id INTEGER NOT NULL,
@@ -207,16 +199,19 @@ def buy_product(product_id):
                       sales_id INTEGER NOT NULL,
                       customer_id INTEGER,
                       FOREIGN KEY (sales_id) REFERENCES sales(sales_id))''')
+            
+            # Update quantity in stock and item tables
             new_quantity = current_quantity - quantity_to_buy
-            c.execute('''UPDATE stock SET quantity=? WHERE id=?''', (new_quantity, product_id))  # Here we provide arguments to execute method
+            c.execute('''UPDATE stock SET quantity=? WHERE id=?''', (new_quantity, product_id))
             c.execute('''UPDATE item SET quantity=? WHERE id=?''', (new_quantity, product_id))
             c.execute('''INSERT INTO sales VALUES(?, ?, ?, ?)''', (salesid, product_id, quantity_to_buy, datetime.date.today().strftime('%Y-%m-%d')))
             c.execute('''INSERT INTO trans VALUES(?, ?,? )''', (1, salesid, cus_id,))
-            print('INSERT INTO sales VALUES', (salesid, product_id, quantity_to_buy, datetime.date.today().strftime('%Y-%m-%d')))
-            print('UPDATE stock SET quantity=', new_quantity,' WHERE id=', product_id)
-            print('UPDATE item SET quantity=', new_quantity,' WHERE id=', product_id)
-            print('''INSERT INTO trans VALUES''', (salesid, cus_id)) 
             conn.commit()
+
+            # Update the product label with the new details
+            updated_product_str = f"{product_id}, {product_name}, {brand}, {price}, {category}, {admin_id}, {new_quantity}"  # Include all details
+            label.config(text=updated_product_str)
+
             messagebox.showinfo("Success", f"{quantity_to_buy} item(s) bought successfully!")
         else:
             messagebox.showerror("Error", "Not enough stock available!")
@@ -225,9 +220,8 @@ def buy_product(product_id):
     finally:
         conn.close()
 
-
-# Function to open the Customer window
 salesid = 1000
+
 def open_customer_window():
     global salesid
     # Create customer window
@@ -239,24 +233,44 @@ def open_customer_window():
     screen_height = customer_window.winfo_screenheight()
 
     # Set background color
-    customer_window.configure(bg="#3498db")
+    customer_window.configure(bg="#0e3246")
 
     # Get products from database
     products = get_products_from_database()
     salesid += 1
+    
     # Display products
     for i, product in enumerate(products):
         product_str = ", ".join(map(str, product))
-        label = tk.Label(customer_window, text=product_str, bg="#3498db", fg="white", font=("Arial", 14))
+        label = tk.Label(customer_window, text=product_str, bg="#0e3246", fg="white", font=("Arial", 14))
         label.grid(row=i, column=0, padx=10, pady=5)
-        buy_button = tk.Button(customer_window, text="Buy", command=lambda product_id=product[0]: buy_product(product_id), bg="#2ecc71", fg="white", font=("Arial", 14))
+
+        # Pass label as argument to update quantity dynamically
+        buy_button = tk.Button(customer_window, text="Buy", command=lambda product_id=product[0], lbl=label: buy_product(product_id, lbl), bg="#2ecc71", fg="white", font=("Arial", 14))
         buy_button.grid(row=i, column=1, padx=10, pady=5)
+
+    # Create Logout button
+    logout_button = tk.Button(customer_window, text="Logout", command=lambda: logout(customer_window), bg="#e67e22", fg="white", font=("Arial", 14))
+    logout_button.place(relx=0.95, rely=0.05, anchor="ne")  # Top right corner
 
     # Centering the window
     customer_window.geometry(f"{screen_width}x{screen_height}+0+0")
 
     # Run the application
     customer_window.mainloop()
+
+def validate_login():
+    username = username_entry.get()
+    password = password_entry.get()
+    if username == "shopowner" and password == "password":
+        messagebox.showinfo("Login Successful", "Welcome, " + username + "!")
+        open_main_window()
+    elif username == "customer" and password == "password":
+        messagebox.showinfo("Login Successful", "Welcome, Customer!")
+        root.destroy()  # Close login window
+        open_customer_window()
+    else:
+        messagebox.showerror("Login Failed", "Invalid username or password")
 
 # Function to validate customer login
 def validate_customer_login():
@@ -275,10 +289,8 @@ def print_table_details(table_name):
     try:
         conn = sqlite3.connect('products.db')
         c = conn.cursor()
-        # Execute SELECT query to fetch all rows from the table
         c.execute(f"SELECT * FROM {table_name}")
         rows = c.fetchall()
-        # Print column names
         column_names = [description[0] for description in c.description]
         print("Column Names:", column_names)
         # Print rows
@@ -289,29 +301,40 @@ def print_table_details(table_name):
     finally:
         conn.close()
 
-root = tk.Tk()
-root.title("Login Page")
-print_table_details('trans')
-screen_width = root.winfo_screenwidth()
-screen_height = root.winfo_screenheight()
 
-root.configure(bg="#3498db")
+def on_enter(e):
+    e.widget['background'] = '#27ae60'
 
-username_label = tk.Label(root, text="Username:", bg="#3498db", fg="white", font=("Arial", 14))
-username_label.place(relx=0.4, rely=0.4, anchor="center")
-username_entry = tk.Entry(root, font=("Arial", 14))
-username_entry.place(relx=0.6, rely=0.4, anchor="center")
+def on_leave(e):
+    e.widget['background'] = '#2ecc71'
 
-password_label = tk.Label(root, text="Password:", bg="#3498db", fg="white", font=("Arial", 14))
-password_label.place(relx=0.4, rely=0.5, anchor="center")
-password_entry = tk.Entry(root, show="*", font=("Arial", 14))
-password_entry.place(relx=0.6, rely=0.5, anchor="center")
+def open_login_page():
+    global root
+    root = tk.Tk()
+    root.title("Login")
 
-login_button = tk.Button(root, text="Login", command=validate_login, bg="#2ecc71", fg="white", font=("Arial", 14))
-login_button.place(relx=0.5, rely=0.6, anchor="center")
+    # Get screen width and height
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
 
-# Centering the windo
-root.geometry(f"{screen_width}x{screen_height}+0+0")
+    root.configure(bg="#0e3246")
+    root.geometry(f"400x300")
+    root.eval('tk::PlaceWindow %s center' % root.winfo_toplevel())
 
-# Run the application
-root.mainloop()
+    # Create a frame to center content
+    frame = tk.Frame(root, bg="#0e3246")
+    frame.place(relx=0.5, rely=0.5, anchor="center")
+    tk.Label(frame, text="Username:", bg="#0e3246", fg="white", font=("Arial", 16)).pack(pady=5)
+    global username_entry
+    username_entry = tk.Entry(frame, font=("Arial", 16))
+    username_entry.pack(pady=10)
+    tk.Label(frame, text="Password:", bg="#0e3246", fg="white", font=("Arial", 16)).pack(pady=5)
+    global password_entry
+    password_entry = tk.Entry(frame, show='*', font=("Arial", 16))
+    password_entry.pack(pady=10)
+    login_button = tk.Button(frame, text="Login", command=validate_login, bg="#2ecc71", fg="white", font=("Arial", 14))
+    login_button.pack(pady=20)
+    root.mainloop()
+
+
+open_login_page()
